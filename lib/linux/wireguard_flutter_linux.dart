@@ -28,16 +28,12 @@ class WireGuardFlutterLinux extends WireGuardFlutterInterface {
   }
 
   Future<String> get filePath async {
-    final tempDir = await getTemporaryDirectory();
-    return '${tempDir.path}${Platform.pathSeparator}$name.conf';
+    // final tempDir = await getTemporaryDirectory();
+    return '/etc/wireguard/${Platform.pathSeparator}$name.conf';
   }
 
   @override
-  Future<void> startVpn({
-    required String serverAddress,
-    required String wgQuickConfig,
-    required String providerBundleIdentifier,
-  }) async {
+  Future<void> startVpn({required String serverAddress, required String wgQuickConfig, required String providerBundleIdentifier}) async {
     final isAlreadyConnected = await isConnected();
     if (!isAlreadyConnected) {
       _setStage(VpnStage.preparing);
@@ -71,10 +67,7 @@ class WireGuardFlutterLinux extends WireGuardFlutterInterface {
 
   @override
   Future<void> stopVpn() async {
-    assert(
-      (await isConnected()),
-      'Bad state: vpn has not been started. Call startVpn',
-    );
+    assert((await isConnected()), 'Bad state: vpn has not been started. Call startVpn');
     _setStage(VpnStage.disconnecting);
     try {
       await shell.run('sudo wg-quick down ${configFile?.path ?? (await filePath)}');
@@ -106,10 +99,7 @@ class WireGuardFlutterLinux extends WireGuardFlutterInterface {
 
   @override
   Future<bool> isConnected() async {
-    assert(
-      name != null,
-      'Bad state: not initialized. Call "initialize" before calling this command',
-    );
+    assert(name != null, 'Bad state: not initialized. Call "initialize" before calling this command');
     final processResultList = await shell.run('sudo wg');
     final process = processResultList.first;
     return process.outLines.any((line) => line.trim() == 'interface: $name');
@@ -117,10 +107,7 @@ class WireGuardFlutterLinux extends WireGuardFlutterInterface {
 
   @override
   Future<Stats?> getStats() async {
-    assert(
-      (await isConnected()),
-      'Bad state: vpn has not been started. Call startVpn',
-    );
+    assert((await isConnected()), 'Bad state: vpn has not been started. Call startVpn');
 
     final processResultList = await shell.run('sudo wg show $name');
     final process = processResultList.first;
@@ -142,16 +129,81 @@ class WireGuardFlutterLinux extends WireGuardFlutterInterface {
         var handshakeData = line.split(': ')[1].trim();
         if (handshakeData != '0') {
           // Parse the date and time
-          var dateTime = DateTime.parse(handshakeData);
-          lastHandshake = dateTime.millisecondsSinceEpoch;
+          var dateTime = parseWgHandshake(handshakeData);
+          if (dateTime != null) {
+            lastHandshake = dateTime.millisecondsSinceEpoch;
+          }
         }
       }
     }
 
-    return Stats(
-      totalDownload: totalDownload,
-      totalUpload: totalUpload,
-      lastHandshake: lastHandshake,
-    );
+    return Stats(totalDownload: totalDownload, totalUpload: totalUpload, lastHandshake: lastHandshake);
+  }
+
+  /// Parses the "latest handshake" string from `wg show` into a Dart DateTime.
+  /// Returns null if the handshake has never happened (or on error).
+  DateTime? parseWgHandshake(String handshakeStr) {
+    if (handshakeStr.isEmpty || handshakeStr.contains("0")) {
+      // Depending on wg version/state, "0" or empty might mean no handshake.
+      // Usually, if no handshake occurred, the line is often omitted or 0.
+      return null;
+    }
+
+    // 1. Handle the "Now" case defined in ago()
+    if (handshakeStr.trim() == "Now") {
+      return DateTime.now();
+    }
+
+    // 2. Handle the "System clock wound backward" error case
+    if (handshakeStr.contains("System clock wound backward")) {
+      // You might want to throw an error or return null here
+      return null;
+    }
+
+    // 3. Strip ANSI escape codes (e.g., \x1b[36m) and standard separators
+    // The C code uses TERMINAL_FG_CYAN etc.
+    final ansiRegex = RegExp(r'\x1B\[[0-9;]*[mK]');
+    String cleanStr = handshakeStr.replaceAll(ansiRegex, '');
+
+    // Remove " ago" and standardizing text
+    cleanStr = cleanStr.replaceAll(' ago', '').trim();
+
+    // 4. Parse the duration components
+    int years = 0;
+    int days = 0;
+    int hours = 0;
+    int minutes = 0;
+    int seconds = 0;
+
+    // Regex looks for a number followed by a word (e.g., "2 minutes")
+    final regex = RegExp(r'(\d+)\s+([a-zA-Z]+)');
+    final matches = regex.allMatches(cleanStr);
+
+    for (final match in matches) {
+      final value = int.parse(match.group(1)!);
+      final unit = match.group(2)!.toLowerCase();
+
+      // Check startsWith to handle plurals (year/years, day/days)
+      if (unit.startsWith('year')) {
+        years = value;
+      } else if (unit.startsWith('day')) {
+        days = value;
+      } else if (unit.startsWith('hour')) {
+        hours = value;
+      } else if (unit.startsWith('minute')) {
+        minutes = value;
+      } else if (unit.startsWith('second')) {
+        seconds = value;
+      }
+    }
+
+    // 5. Calculate the past date
+    // Note: The C code hardcodes a year as 365 days: "years = left / (365 * 24 * 60 * 60);"
+    // We must mimic this to get the accurate timestamp back.
+    final totalDays = (years * 365) + days;
+
+    final durationAgo = Duration(days: totalDays, hours: hours, minutes: minutes, seconds: seconds);
+
+    return DateTime.now().subtract(durationAgo);
   }
 }
