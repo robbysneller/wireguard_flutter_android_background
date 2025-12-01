@@ -52,6 +52,10 @@ class WireGuardFlutterLinux extends WireGuardFlutterInterface {
 
       try {
         await shell.run('sudo wg-quick up $name');
+
+        ProcessSignal.sigterm.watch().listen((_) {
+          shell.run('sudo wg-quick down $name');
+        });
       } catch (_) {
       } finally {
         _setStage(VpnStage.denied);
@@ -108,7 +112,6 @@ class WireGuardFlutterLinux extends WireGuardFlutterInterface {
   @override
   Future<Stats?> getStats() async {
     if (await isConnected()) {
-      
       return null;
     }
 
