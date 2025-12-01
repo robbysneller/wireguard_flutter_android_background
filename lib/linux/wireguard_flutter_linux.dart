@@ -107,7 +107,10 @@ class WireGuardFlutterLinux extends WireGuardFlutterInterface {
 
   @override
   Future<Stats?> getStats() async {
-    assert((await isConnected()), 'Bad state: vpn has not been started. Call startVpn');
+    if (await isConnected()) {
+      
+      return null;
+    }
 
     final processResultList = await shell.run('sudo wg show $name');
     final process = processResultList.first;
