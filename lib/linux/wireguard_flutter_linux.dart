@@ -121,9 +121,7 @@ class WireGuardFlutterLinux extends WireGuardFlutterInterface {
 
     for (var line in lines) {
       if (line.contains('transfer:')) {
-        var transferData = line.split(': ')[1].split(', ');
-        totalDownload += int.tryParse(transferData[0].split(' ')[0].trim()) ?? 0;
-        totalUpload += int.tryParse(transferData[1].split(' ')[0].trim()) ?? 0;
+        (totalUpload, totalDownload) = parseTransfer(line);
       }
       if (line.contains('latest handshake:')) {
         var handshakeData = line.split(': ')[1].trim();
@@ -205,5 +203,39 @@ class WireGuardFlutterLinux extends WireGuardFlutterInterface {
     final durationAgo = Duration(days: totalDays, hours: hours, minutes: minutes, seconds: seconds);
 
     return DateTime.now().subtract(durationAgo);
+  }
+
+  int _unitToMultiplier(String unit) {
+    switch (unit) {
+      case 'KiB':
+        return 1024;
+      case 'MiB':
+        return 1024 * 1024;
+      case 'GiB':
+        return 1024 * 1024 * 1024;
+      case 'TiB':
+        return 1024 * 1024 * 1024 * 1024;
+      default:
+        throw ArgumentError('Unknown unit: $unit');
+    }
+  }
+
+  (int received, int sent) parseTransfer(String line) {
+    final regex = RegExp(r'transfer:\s*([\d.]+)\s*(KiB|MiB|GiB|TiB)\s*received,\s*([\d.]+)\s*(KiB|MiB|GiB|TiB)\s*sent');
+
+    final m = regex.firstMatch(line);
+    if (m == null) {
+      throw FormatException('Could not parse transfer line: $line');
+    }
+
+    final recvValue = double.parse(m.group(1)!);
+    final recvUnit = m.group(2)!;
+    final sentValue = double.parse(m.group(3)!);
+    final sentUnit = m.group(4)!;
+
+    final receivedBytes = (recvValue * _unitToMultiplier(recvUnit)).round();
+    final sentBytes = (sentValue * _unitToMultiplier(sentUnit)).round();
+
+    return (sentBytes, receivedBytes);
   }
 }
