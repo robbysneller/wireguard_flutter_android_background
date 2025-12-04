@@ -42,8 +42,7 @@ class WireGuardFlutterLinux extends WireGuardFlutterInterface {
     }
 
     try {
-      
-      shell.run('echo \'${wgQuickConfig}\' | sudo tee ${await filePath} > /dev/null');
+      shell.run('echo -e \'${wgQuickConfig}\' | sudo tee ${await filePath} > /dev/null');
       configFile = await File(await filePath).create();
       await configFile!.writeAsString(wgQuickConfig);
     } on PathAccessException {
