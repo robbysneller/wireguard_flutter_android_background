@@ -58,9 +58,6 @@ class WireGuardFlutterLinux extends WireGuardFlutterInterface {
 
       try {
         await shell.run('sudo wg-quick up $name');
-        ProcessSignal.sigkill.watch().listen((_) {
-          shell.run('sudo wg-quick down $name');
-        });
         ProcessSignal.sigint.watch().listen((_) {
           shell.run('sudo wg-quick down $name');
         });
@@ -76,9 +73,6 @@ class WireGuardFlutterLinux extends WireGuardFlutterInterface {
     if (!isAlreadyConnected) {
       _setStage(VpnStage.connecting);
       await shell.run('sudo wg-quick up ${configFile?.path ?? await filePath}');
-      ProcessSignal.sigkill.watch().listen((_) {
-        shell.run('sudo wg-quick down $name');
-      });
       ProcessSignal.sigint.watch().listen((_) {
         shell.run('sudo wg-quick down $name');
       });
