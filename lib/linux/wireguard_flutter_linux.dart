@@ -29,7 +29,7 @@ class WireGuardFlutterLinux extends WireGuardFlutterInterface {
 
   Future<String> get filePath async {
     // final tempDir = await getTemporaryDirectory();
-    return '/etc/wireguard/${Platform.pathSeparator}$name.conf';
+    return '/etc/wireguard${Platform.pathSeparator}$name.conf';
   }
 
   @override
@@ -42,6 +42,8 @@ class WireGuardFlutterLinux extends WireGuardFlutterInterface {
     }
 
     try {
+      
+      shell.run('echo \'${wgQuickConfig}\' | sudo tee ${await filePath} > /dev/null');
       configFile = await File(await filePath).create();
       await configFile!.writeAsString(wgQuickConfig);
     } on PathAccessException {
@@ -52,7 +54,12 @@ class WireGuardFlutterLinux extends WireGuardFlutterInterface {
 
       try {
         await shell.run('sudo wg-quick up $name');
-
+        ProcessSignal.sigkill.watch().listen((_) {
+          shell.run('sudo wg-quick down $name');
+        });
+        ProcessSignal.sigint.watch().listen((_) {
+          shell.run('sudo wg-quick down $name');
+        });
         ProcessSignal.sigterm.watch().listen((_) {
           shell.run('sudo wg-quick down $name');
         });
@@ -65,6 +72,15 @@ class WireGuardFlutterLinux extends WireGuardFlutterInterface {
     if (!isAlreadyConnected) {
       _setStage(VpnStage.connecting);
       await shell.run('sudo wg-quick up ${configFile?.path ?? await filePath}');
+      ProcessSignal.sigkill.watch().listen((_) {
+        shell.run('sudo wg-quick down $name');
+      });
+      ProcessSignal.sigint.watch().listen((_) {
+        shell.run('sudo wg-quick down $name');
+      });
+      ProcessSignal.sigterm.watch().listen((_) {
+        shell.run('sudo wg-quick down $name');
+      });
       _setStage(VpnStage.connected);
     }
   }
