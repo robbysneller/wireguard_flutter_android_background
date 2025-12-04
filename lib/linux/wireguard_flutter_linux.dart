@@ -125,11 +125,13 @@ class WireGuardFlutterLinux extends WireGuardFlutterInterface {
 
   @override
   Future<Stats?> getStats() async {
-    if (await isConnected()) {
+    if (!await isConnected()) {
+      // debugPrint('result from wg show? ${processResultList}');
       return null;
     }
 
     final processResultList = await shell.run('sudo wg show $name');
+    // debugPrint('result from wg show? ${processResultList}');
     final process = processResultList.first;
     final lines = process.outLines;
 
