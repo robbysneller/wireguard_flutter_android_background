@@ -42,8 +42,8 @@ class WireGuardFlutterLinux extends WireGuardFlutterInterface {
     }
 
     try {
-      // shell.run('echo -e \'${wgQuickConfig}\' | sudo tee ${await filePath} > /dev/null');
-      final process = await Process.start('sudo', ['tee', '${await filePath}']);
+      // shell.run('echo -e \'${wgQuickConfig}\' | pkexec tee ${await filePath} > /dev/null');
+      final process = await Process.start('pkexec', ['tee', '${await filePath}']);
       process.stdin.write(wgQuickConfig);
       await process.stdin.close();
       var exitCode = await process.exitCode;
@@ -57,12 +57,12 @@ class WireGuardFlutterLinux extends WireGuardFlutterInterface {
       }
 
       try {
-        await shell.run('sudo wg-quick up $name');
+        await shell.run('pkexec wg-quick up $name');
         ProcessSignal.sigint.watch().listen((_) {
-          shell.run('sudo wg-quick down $name');
+          shell.run('pkexec wg-quick down $name');
         });
         ProcessSignal.sigterm.watch().listen((_) {
-          shell.run('sudo wg-quick down $name');
+          shell.run('pkexec wg-quick down $name');
         });
       } catch (_) {
       } finally {
@@ -72,12 +72,12 @@ class WireGuardFlutterLinux extends WireGuardFlutterInterface {
 
     if (!isAlreadyConnected) {
       _setStage(VpnStage.connecting);
-      await shell.run('sudo wg-quick up ${configFile?.path ?? await filePath}');
+      await shell.run('pkexec wg-quick up ${configFile?.path ?? await filePath}');
       ProcessSignal.sigint.watch().listen((_) {
-        shell.run('sudo wg-quick down $name');
+        shell.run('pkexec wg-quick down $name');
       });
       ProcessSignal.sigterm.watch().listen((_) {
-        shell.run('sudo wg-quick down $name');
+        shell.run('pkexec wg-quick down $name');
       });
       _setStage(VpnStage.connected);
     }
@@ -88,7 +88,7 @@ class WireGuardFlutterLinux extends WireGuardFlutterInterface {
     assert((await isConnected()), 'Bad state: vpn has not been started. Call startVpn');
     _setStage(VpnStage.disconnecting);
     try {
-      await shell.run('sudo wg-quick down ${configFile?.path ?? (await filePath)}');
+      await shell.run('pkexec wg-quick down ${configFile?.path ?? (await filePath)}');
     } catch (e) {
       await refreshStage();
       rethrow;
@@ -118,7 +118,7 @@ class WireGuardFlutterLinux extends WireGuardFlutterInterface {
   @override
   Future<bool> isConnected() async {
     assert(name != null, 'Bad state: not initialized. Call "initialize" before calling this command');
-    final processResultList = await shell.run('sudo wg');
+    final processResultList = await shell.run('pkexec wg');
     final process = processResultList.first;
     return process.outLines.any((line) => line.trim() == 'interface: $name');
   }
@@ -130,7 +130,7 @@ class WireGuardFlutterLinux extends WireGuardFlutterInterface {
       return null;
     }
 
-    final processResultList = await shell.run('sudo wg show $name');
+    final processResultList = await shell.run('pkexec wg show $name');
     // debugPrint('result from wg show? ${processResultList}');
     final process = processResultList.first;
     final lines = process.outLines;
@@ -229,6 +229,8 @@ class WireGuardFlutterLinux extends WireGuardFlutterInterface {
 
   int _unitToMultiplier(String unit) {
     switch (unit) {
+      case 'B':
+        return 1;
       case 'KiB':
         return 1024;
       case 'MiB':
@@ -243,7 +245,7 @@ class WireGuardFlutterLinux extends WireGuardFlutterInterface {
   }
 
   (int received, int sent) parseTransfer(String line) {
-    final regex = RegExp(r'transfer:\s*([\d.]+)\s*(KiB|MiB|GiB|TiB)\s*received,\s*([\d.]+)\s*(KiB|MiB|GiB|TiB)\s*sent');
+    final regex = RegExp(r'transfer:\s*([\d.]+)\s*(B|KiB|MiB|GiB|TiB)\s*received,\s*([\d.]+)\s*(B|KiB|MiB|GiB|TiB)\s*sent');
 
     final m = regex.firstMatch(line);
     if (m == null) {
